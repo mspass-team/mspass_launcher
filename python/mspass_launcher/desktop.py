@@ -23,7 +23,8 @@ import threading
 import tkinter as tk
 import yaml
 import json
-"
+from mspass_launcher.util import datafile
+
 class MsPASSDesktopCluster:
     """
     Class to manage an instance of MsPASS with docker compose. 
@@ -533,7 +534,7 @@ class MsPASSDesktopGUI:
         index = jupyter_url.find(anchor)
         if index < 0:
             message  = "MsPASSDesktopGUI.launch_diagnostics_callback:  malformed url\n"
-            message += "parsed url for jupyter server = " + url + "\n"
+            message += "parsed url for jupyter server = " + jupyter_url + "\n"
             message += "Unable to extract host url base name\n"
             message += "Try launching diagnostic window by entering the correct url in browser"
             print(message)
@@ -573,7 +574,7 @@ class MsPASSDesktopGUI:
                     print("Launch diagnostic window manually as described in dask documentation")
         else:
             message  = "MsPASSDesktopGUI.launch_diagnostics_callback:  malformed url\n"
-            message += "parsed url for jupyter server = " + url + "\n"
+            message += "parsed url for jupyter server = " + base_url + "\n"
             message += "string does not contain expected :8888 port number in url\n"
             message += "Try launching diagnostic window by entering the correct url in browser"
             print(message)
@@ -784,20 +785,20 @@ def parse_yaml_file(filename=None,
     """
     # this was derived from a similar parsing for schema.py
     if filename is None:
-        config_file = mspass_yaml_file(default_file_name)
+        file_path = datafile(default_file_name)
     else:
-        config_file = mspass_yaml_file(filename)
+        file_path=datafile(filename)
             
     try:
-        with open(config_file, "r") as stream:
+        with open(file_path, "r") as stream:
             result_dic = yaml.safe_load(stream)
         return result_dic
     except yaml.YAMLError as e:
-        message = "parse_yaml_file:  Failure parsing configuration file={}\n".format(config_file)
+        message = "parse_yaml_file:  Failure parsing configuration file={}\n".format(file_path)
         message += "Message posted:  {}".format(e)
         raise RuntimeError(e)
     except EnvironmentError as e:
-        message = "parse_yaml_file:  Open failed on yaml file={}\n".format(config_file)
+        message = "parse_yaml_file:  Open failed on yaml file={}\n".format(file_path)
         message += e
         raise RuntimeError(message)
     except Exception as e:

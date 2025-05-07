@@ -249,11 +249,16 @@ class MsPASSDesktopCluster:
                     message += "Check docker documentation and consider using an older version of docker until this can be fixed"
                     raise RuntimeError(message)
                 else:
-                    result = json.loads(outlines[0])
+                    jsonout = json.loads(outlines[0])
+                    # docker ps returns a list with a dict inside on some macos versions
+                    # this is needed to handle that anomaly
+                    # note not json.loads issue but what docker ps spit out 
+                    if isinstance(jsonout,list):
+                        jsonout = jsonout[0]
                     if form=="all":
-                        return result
+                        return jsonout
                     else:
-                        return result ["State"]        
+                        return jsonout ["State"]        
         else:
             message = prog + ":  " + "invalid value for arg0={}\n".format(service)
             message += "Must be one of:  mspass-db, mspass-frontend, mspass-scheduler, or mspass-worker"

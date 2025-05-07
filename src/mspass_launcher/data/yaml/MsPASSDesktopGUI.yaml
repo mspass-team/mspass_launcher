@@ -5,7 +5,7 @@ log_window_size_y: 4           # vertical size of Text widget log windows - numb
 grid_padding:  5               # padding in pixels to use for padx and pady values in grid geometry setups
 # docker compose definitions must be in this additional file
 docker_compose_yaml_file: DesktopCluster.yaml
-engine_startup_delay:  5       # seconds to wait during startup before trying fi check status
+engine_startup_delay_time:  5       # seconds to wait during startup before trying fi check status
 status_monitor_time_interval:  10  # Number of seconds between tests for status of all running containers
 web_browser:  firefox         # use if the name resolves in the shell.  Comment out this line for MacOS and Windows
 # normal docker usage binds current directory to a fixed mount point (default /home) 

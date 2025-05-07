@@ -189,7 +189,6 @@ class MsPASSDesktopCluster:
         runline.append("python")
         runline.append(filename)
         try:
-            print("Debug: ",runline)
             runout = subprocess.run(runline,capture_output=True,text=True,check=True)
             if return_output:
                 return runout.stdout
@@ -493,11 +492,8 @@ class MsPASSDesktopGUI:
         time, and then launches the status monitor.  Finally, it enables the 
         work other buttons and disable itself before exiting.  
         """
-        print("Testing:  launch button works")
-        print("Launching engine")
         self.engine = MsPASSDesktopCluster(configuration=self.docker_compose_filename)
         self.engine.launch_cluster()
-        print("engine running")
         # needed because otherwise the status monitor will throw an exception if 
         # a service is not defined.  
         # TODO:  this could probably be avoided by letting undefined make status red with a different label
@@ -519,7 +515,6 @@ class MsPASSDesktopGUI:
         It tries to launch the jupyter lab browser window. 
         It also inserts the url it resolves into the url text widget. 
         """
-        print("Testing:  Jupyter button works")
         self.engine.launch_jupyter_client(self.browser)
         jupyter_url = self.engine.url()
         self.text_url.insert("1.0",jupyter_url)
@@ -532,7 +527,6 @@ class MsPASSDesktopGUI:
         same approach as the jupyter lab launcher for resolving the browser.  
         If the Jupyter button doesn't work this one won't either. 
         """
-        print("Testing:  Diagnostic button works")
         jupyter_url = self.engine.url()
         # if valid the url always has this magic string
         anchor = "lab?token="
@@ -618,7 +612,6 @@ class MsPASSDesktopGUI:
         
         This method opens a new window and build the run window gui.   
         """
-        print("Testing:  run button works with hello.py script")
         self.run_window = tk.Toplevel()
         self.frm_run_entries = tk.Frame(self.run_window, relief=tk.RAISED, bd=2)
         self.label_dir_name = tk.Label(self.frm_run_entries,text="Directory inside container where script can be found")
@@ -635,9 +628,6 @@ class MsPASSDesktopGUI:
         
         self.btn_run_script = tk.Button(self.run_window, text="Run it", command=self.container_run_callback)
         self.btn_run_script.pack()
-        #fullpath = self.container_run_directory + "/" + "hello.py"
-        #out = self.engine.run(fullpath,return_output=True)
-        #print(out)
     def shutdown_callback(self):
         """
         Method run when the shutdown button is pushed.   
@@ -646,7 +636,6 @@ class MsPASSDesktopGUI:
         lab and dask diagnostic windows in a web browser.  The diagnostics window will still function 
         on a restart but the jupyter server will not.  
         """
-        print("Testing:  Shutdown button works")
         # this must be done first to kill the monitor thread
         # sleep to match time delay to be sure the monitor thread has exited before
         # the engine is stopped

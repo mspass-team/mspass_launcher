@@ -380,6 +380,10 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                                         stderr=subprocess.PIPE,
                                         close_fds=True,
                                     )
+            if verbose:
+                print("Successfully launched remote node workers")
+                print("launch line:")
+                print(worker_run_args)
         # do not trap error of no worker nodes and no workers 
         # assigned to primary - assume constructor traps that condition.
         if self.primary_node_workers>0:
@@ -402,10 +406,6 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             #envlist += "MSPASS_DB_ADDRESS={},".format(self.database_host)
             envlist += 'MSPASS_WORKER_ARG="--nworkers={} --nthreads 1"'.format(self.primary_node_workers)
             srun += envlist + " " + self.container
-            if verbose:
-                print("launch line:")
-                print(srun)
-            #self.primary_worker_process = subprocess.Popen(runline,
             self.primary_worker_process = subprocess.Popen(srun,shell=True,
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE,
@@ -414,6 +414,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                                     )
             if verbose:
                 print(f"Successfully launched {self.primary_node_workers} workers on primary node")
+                print("launch line:")
+                print(srun)
             
         # Exit immmeditaly if any of the contaienrs  have exited
         if self.status(verbose=False) == 0:

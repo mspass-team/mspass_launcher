@@ -348,8 +348,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                                 )
         if verbose:
             print("Successfully launched scheduler")
-        print("Debug:  launch line")
-        print(runline)
+            print("launch line:")
+            print(runline)
         # now do a similar thing for database 
         # note this implementation doesn't handle shrarding
         runline = self._initialize_container_runargs()
@@ -368,8 +368,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                                 )
         if verbose:
             print("Successfully launched db")
-        print("Debug:  launch line")
-        print(runline)
+            print("launch line:")
+            print(runline)
         # Now launch workers on hosts that are not primaary host
         worker_run_args=self._build_worker_run_args()
         if len(worker_run_args)>0:
@@ -380,9 +380,12 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                                         stderr=subprocess.PIPE,
                                         close_fds=True,
                                     )
+            if verbose:
+                print("Successfully launched remote node workers")
+                print("launch line:")
+                print(worker_run_args)
         # do not trap error of no worker nodes and no workers 
         # assigned to primary - assume constructor traps that condition.
-        print("Launching worker container on primary node")
         if self.primary_node_workers>0:
             # we have to launch this container differently soo 
             # we have to prepare a somewhat different run line
@@ -403,16 +406,16 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             #envlist += "MSPASS_DB_ADDRESS={},".format(self.database_host)
             envlist += 'MSPASS_WORKER_ARG="--nworkers={} --nthreads 1"'.format(self.primary_node_workers)
             srun += envlist + " " + self.container
-            print("command line sent to Popen")
-            print(srun)
-            #self.primary_worker_process = subprocess.Popen(runline,
             self.primary_worker_process = subprocess.Popen(srun,shell=True,
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE,
                                         close_fds=True,
                                     )
-            print("Launched workers on primary node")
+            if verbose:
+                print(f"Successfully launched {self.primary_node_workers} workers on primary node")
+                print("launch line:")
+                print(srun)
             
         # Exit immmeditaly if any of the contaienrs  have exited
         if self.status(verbose=False) == 0:
@@ -429,11 +432,14 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             raise RuntimeError(message)
 
     def shutdown(self):
-        # shutdown in reverse order to start
-        # first workers
-        # I think we only need to handle primary node container.  
-        # The contaners on other nodes have to be shut down by slurm
-        # unless here is an mpitrick I am unaware of
+        """
+        Shut down the services containers gracefully.
+
+        This method should always be called before exiting a python 
+        job when the script is finished using mspass.  It shuts the 
+        cluster containers down cleanly using the Popen method 
+        called terminate.   If terminate files the handler use a kill.
+        """
         if self.jupyter_process:
             try :
                 self.jupyter_process.terminate()
@@ -450,16 +456,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                 print("Worker container on primary node did not respond to terminate method")
                 print("Reverting to less graceful kill")
                 self.primary_worker_process.kill()
-        # now database - should always be running so no need for not None 
-        # test for the rest of these
-        try :
-            self.dbserver_process.terminate()
-            self.dbserver_process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            print("Database server container did not respond to terminate method")
-            print("Reverting to less graceful kill")
-            self.dbserver_process.kill()
-        # finally terminate the scheduler
+        # terminate the scheduler
         try :
             self.scheduler_process.terminate()
             self.scheduler_process.wait(timeout=10)
@@ -467,6 +464,14 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             print("Scheduler container did not respond to terminate method")
             print("Reverting to less graceful kill")
             self.scheduler_process.kill()
+        # now database - should always be running so no need for None test
+        try :
+            self.dbserver_process.terminate()
+            self.dbserver_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            print("Database server container did not respond to terminate method")
+            print("Reverting to less graceful kill")
+            self.dbserver_process.kill()
 
     def run(self,pyscript):
         """
@@ -496,9 +501,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         runline.append(self.container)
         runline.append("--batch")
         runline.append(pyscript)
-        print("running script")
-        print("Debug:  launch line")
-        print(runline)
+        print("running script file= ",pyscript)
         
         runout=subprocess.run(runline,capture_output=True,text=True)
         print("stdout from this job")

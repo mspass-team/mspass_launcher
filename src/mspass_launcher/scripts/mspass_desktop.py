@@ -34,7 +34,8 @@ def main(args=None):
     parser.add_argument(
         "-c",
         "--config_file",
-        default="MsPASSGUI.yaml",
+        nargs=1,
+        default="MsPASSDesktopGUI.yaml",
         help="Change default ",
     )
     args = parser.parse_args(args)

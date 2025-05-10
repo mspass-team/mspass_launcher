@@ -10,7 +10,7 @@ import os
 
 def datafile(filename,
       format="yaml",
-      dirs=[".","../data/yaml","../data/pf"],
+      dirs=[".","./data/yaml","./data/pf","../data/yaml","../data/pf"],
      try_mspass_home=False,
     )->str:
     """
@@ -63,7 +63,7 @@ def datafile(filename,
                 message += "format argument demands file be an Antelope pf format file\n"
                 message += "A valid pf data file name must end in .pf"
                 raise ValueError(message)
-    dirlist = dirs
+    dirlist = dirs.copy()
     # extend the search if MSPASS_HOME is defined
     mspass_home = os.environ.get("MSPASS_HOME")
     if mspass_home:

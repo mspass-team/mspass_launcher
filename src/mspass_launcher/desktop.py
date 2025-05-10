@@ -779,9 +779,15 @@ def parse_yaml_file(filename=None,
     """
     # this was derived from a similar parsing for schema.py
     if filename is None:
-        file_path = datafile(default_file_name)
+        fname = default_file_name
     else:
-        file_path=datafile(filename)
+        fname = filename
+        
+    file_path = datafile(fname)
+    
+    if file_path is None:
+        message = "parse_yaml_file:   yaml file=" + fname + " not found in standard search path"
+        raise RuntimeError(message)
             
     try:
         with open(file_path, "r") as stream:

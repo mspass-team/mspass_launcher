@@ -347,6 +347,7 @@ class MsPASSDesktopGUI:
     def __init__(
         self,
         configuration="MsPASSDesktopGUI.yaml",
+        verbose=False,
     ):
         """
         Creates GUI in initial state with launch button enabled and
@@ -372,7 +373,10 @@ class MsPASSDesktopGUI:
 
         # first read yaml file that sets defines some gui
         # configuration data - store this in the dict self.config_data
-        self.config_data = parse_yaml_file(configuration)
+        self.config_data = parse_yaml_file(configuration,verbose=verbose)
+        if verbose:
+            print("MsPASSDesktopGUI configuration parameters:")
+            print(json.dumps(self.config_data,indent=4))
         self.docker_compose_filename = self.config_data["docker_compose_yaml_file"]
         self.minsize_x = self.config_data["minimum_window_size_x"]
         self.minsize_y = self.config_data["minimum_window_size_y"]
@@ -908,7 +912,9 @@ def mspass_yaml_file(filename) -> str:
     return config_file
 
 
-def parse_yaml_file(filename=None, default_file_name="MsPASSDesktopGUI.yaml") -> dict:
+def parse_yaml_file(filename=None, 
+                    default_file_name="MsPASSDesktopGUI.yaml",
+                    verbose=False) -> dict:
     """
     Parses a yaml configuration file with the yaml module.  When
     successful it returns a dict with key-value pairs that the
@@ -943,6 +949,8 @@ def parse_yaml_file(filename=None, default_file_name="MsPASSDesktopGUI.yaml") ->
         )
         raise RuntimeError(message)
 
+    if verbose:
+        prin("Parsing yaml file=",file_path)
     try:
         with open(file_path, "r") as stream:
             result_dic = yaml.safe_load(stream)

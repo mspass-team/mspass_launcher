@@ -70,6 +70,7 @@ def datafile(
     dirlist = dirs.copy()
     # extend the search if MSPASS_HOME is defined
     mspass_home = os.environ.get("MSPASS_HOME")
+
     if mspass_home:
         for d in dirs:
             split_d = os.path.split(d)
@@ -79,6 +80,16 @@ def datafile(
             # needed to handle . and .. in a path
             dir = os.path.normpath(dir)
             dirlist.append(dir)
+    # Add module install location as a root as final fallback
+    # A bit repetitious of above but not worth an added function overhead
+    package_root_dir = os.path.dirname(__file__)
+    for d in dirs:
+        split_d = os.path.split(d)
+        dir = package_root_dir
+        for sd in split_d:
+            dir = os.path.join(dir,sd)
+        dir = os.path.normpath(dir)
+        dirlist.append(dir)
 
     # now find the first occurence of filename in the list of directories
     for dir in dirlist:

@@ -75,7 +75,7 @@ class MsPASSDesktopCluster:
         yaml configuration file to be stored other than in the current
         directory.
         """
-        self.docker_configuration_file = mspass_yaml_file(configuration)
+        self.docker_configuration_file = datafile(configuration)
 
     def launch_cluster(self):
         """
@@ -347,6 +347,7 @@ class MsPASSDesktopGUI:
     def __init__(
         self,
         configuration="MsPASSDesktopGUI.yaml",
+        verbose=False,
     ):
         """
         Creates GUI in initial state with launch button enabled and
@@ -372,12 +373,13 @@ class MsPASSDesktopGUI:
 
         # first read yaml file that sets defines some gui
         # configuration data - store this in the dict self.config_data
-        self.config_data = parse_yaml_file(configuration)
+        self.config_data = parse_yaml_file(configuration,verbose=verbose)
+        if verbose:
+            print("MsPASSDesktopGUI configuration parameters:")
+            print(json.dumps(self.config_data,indent=4))
         self.docker_compose_filename = self.config_data["docker_compose_yaml_file"]
         self.minsize_x = self.config_data["minimum_window_size_x"]
         self.minsize_y = self.config_data["minimum_window_size_y"]
-        self.log_window_size_x = self.config_data["log_window_size_x"]
-        self.log_window_size_y = self.config_data["log_window_size_y"]
         self.grid_padding = self.config_data["grid_padding"]
         self.engine_startup_delay_time = self.config_data["engine_startup_delay_time"]
         self.status_monitor_time_interval = self.config_data[
@@ -857,58 +859,10 @@ def extract_jupyter_url(outstr) -> str:
     return "http://localhost:8888"
 
 
-def mspass_yaml_file(filename) -> str:
-    """
-    Performs a standard search for a yaml file in MsPASS.
 
-    This functions standardizes
-    the search for the file to be read in the same way used in the
-    MsPASS Schema constructor.   That is, if filename is set to
-    a valid string the function assumes the string defines a file
-    name in the current directory.  If that file does not exist there
-    the function tries searching for the same file in two places:
-        1) $MSPASS_HOME/data/yaml is used if and only if MSPASS_HOME
-           is defined.
-        2) MSPASS_INSTALL_DIR/data/yaml where MSPASS_INSTALL_DIR
-           is the top level directory of where mspass was installed
-           in your system.  This works because the installation tree
-           has a data/yaml directory with defaults yaml files.
-
-    Note the function does NOT test for existence of the file
-    name or path it returns.  Caller should handle that condition
-    if necessary.
-
-    :param filename:   name of file to find
-    :type filename:  str
-    :return:  str containg a full path to file.
-    """
-    if not isinstance(filename, str):
-        message = "mspass_yaml_file:  arg0 must be a string defining a file name\n"
-        message += "Actual type={}".format(type(filename))
-        raise TypeError(message)
-    # note this resolves true if filename is a file in the current
-    # directory or an absolute path to some file
-    if os.path.isfile(filename):
-        config_file = filename
-    else:
-        if "MSPASS_HOME" in os.environ:
-            config_file = os.path.join(
-                os.path.abspath(os.environ["MSPASS_HOME"]),
-                "data/yaml",
-                filename,
-            )
-        else:
-            config_file = os.path.abspath(
-                os.path.join(
-                    os.path.dirname(__file__),
-                    "../data/yaml",
-                    filename,
-                )
-            )
-    return config_file
-
-
-def parse_yaml_file(filename=None, default_file_name="MsPASSDesktopGUI.yaml") -> dict:
+def parse_yaml_file(filename=None, 
+                    default_file_name="MsPASSDesktopGUI.yaml",
+                    verbose=False) -> dict:
     """
     Parses a yaml configuration file with the yaml module.  When
     successful it returns a dict with key-value pairs that the
@@ -943,6 +897,8 @@ def parse_yaml_file(filename=None, default_file_name="MsPASSDesktopGUI.yaml") ->
         )
         raise RuntimeError(message)
 
+    if verbose:
+        print("Parsing yaml file=",file_path)
     try:
         with open(file_path, "r") as stream:
             result_dic = yaml.safe_load(stream)

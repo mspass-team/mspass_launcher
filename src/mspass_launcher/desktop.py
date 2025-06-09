@@ -125,27 +125,26 @@ class MsPASSDesktopCluster:
         if browser is None:
             browser = get_default_browser()
         runline = []
-        match host_os:
-            case "Darwin":
-                runline.append("open")
-                runline.append("-a")
-                runline.append(browser)
-                runline.append(url)
-            case "Linux":
-                runline = [browser, url]
-            case "Windows":
-                print(
-                    "MsPASSDesktopCluster.launch_jupyter_client: windows browser launching not yet implemented"
-                )
-                print("You will need to enter url in a browser window manually")
-            case _:
-                message = "MsPASSDesktopCluster.launch_jupyter_client:  cannot handle this operating system"
-                message += "platform.system returned {}\n".format(host_os)
-                message += (
-                    "Only know how to handle one of:  Darwin, Linux, or Windows\n"
-                )
-                message += "Submit a pull request with a fix and for now use the CLI cut-and-paste method to connect to jupyter"
-                print(message)
+        if host_os == "Darwin":
+            runline.append("open")
+            runline.append("-a")
+            runline.append(browser)
+            runline.append(url)
+        elif host_os == "Linux":
+            runline = [browser, url]
+        elif host_os == "Windows":
+            print(
+                "MsPASSDesktopCluster.launch_jupyter_client: windows browser launching not yet implemented"
+            )
+            print("You will need to enter url in a browser window manually")
+        else:
+            message = "MsPASSDesktopCluster.launch_jupyter_client:  cannot handle this operating system"
+            message += "platform.system returned {}\n".format(host_os)
+            message += (
+                "Only know how to handle one of:  Darwin, Linux, or Windows\n"
+            )
+            message += "Submit a pull request with a fix and for now use the CLI cut-and-paste method to connect to jupyter"
+            print(message)
         if len(runline) > 0:
             try:
                 subprocess.run(runline, capture_output=True, text=True, check=True)
@@ -563,27 +562,26 @@ class MsPASSDesktopGUI:
                 "mspass-worker",
                 "mspass-frontend",
             ]:
-                match service:
-                    case "mspass-db":
-                        stat = self.engine.status(service)
-                        self.label_db_status_display.config(text=stat)
-                        if stat == "running":
-                            self.label_db_status_display.config(bg="green")
-                    case "mspass-scheduler":
-                        stat = self.engine.status(service)
-                        self.label_scheduler_status_display.config(text=stat)
-                        if stat == "running":
-                            self.label_scheduler_status_display.config(bg="green")
-                    case "mspass-worker":
-                        stat = self.engine.status(service)
-                        self.label_worker_status_display.config(text=stat)
-                        if stat == "running":
-                            self.label_worker_status_display.config(bg="green")
-                    case "mspass-frontend":
-                        stat = self.engine.status(service)
-                        self.label_frontend_status_display.config(text=stat)
-                        if stat == "running":
-                            self.label_frontend_status_display.config(bg="green")
+                if service == "mspass-db":
+                    stat = self.engine.status(service)
+                    self.label_db_status_display.config(text=stat)
+                    if stat == "running":
+                        self.label_db_status_display.config(bg="green")
+                elif service == "mspass-scheduler":
+                    stat = self.engine.status(service)
+                    self.label_scheduler_status_display.config(text=stat)
+                    if stat == "running":
+                        self.label_scheduler_status_display.config(bg="green")
+                elif service == "mspass-worker":
+                    stat = self.engine.status(service)
+                    self.label_worker_status_display.config(text=stat)
+                    if stat == "running":
+                        self.label_worker_status_display.config(bg="green")
+                elif service == "mspass-frontend":
+                    stat = self.engine.status(service)
+                    self.label_frontend_status_display.config(text=stat)
+                    if stat == "running":
+                        self.label_frontend_status_display.config(bg="green")
             time.sleep(self.status_monitor_time_interval)
 
     def launch_cluster_callback(self):
@@ -654,20 +652,19 @@ class MsPASSDesktopGUI:
             if self.browser is None:
                 self.browser = get_default_browser()
             runline = []
-            match host_os:
-                case "Darwin":
-                    runline.append("open")
-                    runline.append("-a")
-                    runline.append(self.browser)
-                    runline.append(diag_url)
-                case "Linux":
-                    runline = [self.browser, diag_url]
-                case "Windows":
-                    print(
-                        "diagnostic window launcher function - windows browser launching not yet implemented"
-                    )
-                    print("You will need to enter url in a browser window manually")
-                    self.btn_diagnostics.config(state="disabled")
+            if host_os == "Darwin":
+                runline.append("open")
+                runline.append("-a")
+                runline.append(self.browser)
+                runline.append(diag_url)
+            elif host_os == "Linux":
+                runline = [self.browser, diag_url]
+            elif host_os == "Windows":
+                print(
+                    "diagnostic window launcher function - windows browser launching not yet implemented"
+                )
+                print("You will need to enter url in a browser window manually")
+                self.btn_diagnostics.config(state="disabled")
             if len(runline) > 0:
                 try:
                     runout = subprocess.run(
@@ -932,63 +929,62 @@ def get_default_browser() -> str:
     # Use this if any of anything goes wrong in os specific code blocks
     failure_browser_name = "FireFox"
     host_os = platform.system()
-    match host_os:
-        case "Linux":
-            try:
-                process = subprocess.Popen(
-                    ["xdg-settings", "get", "default-web-browser"],
-                    stdout=subprocess.PIPE,
-                )
-                output, error = process.communicate()
-                if error:
-                    raise Exception(error)
-                default_browser = output.decode("utf-8").strip()
-            except FileNotFoundError:
-                print("xdg-settings not found. Cannot determine default browser.")
-                print("Using global default=", failure_browser_name)
-                default_browser = failure_browser_name
-            except Exception as e:
-                print(f"Error getting default browser: {e}")
-                print("Using global default=", failure_browser_name)
-                default_browser = failure_browser_name
-        case "Darwin":
-            # obtained from google - does not work with current macos
-            try:
-                process = subprocess.Popen(
-                    ["osascript", "-e", "POSIX path of (get frontmost application)"],
-                    stdout=subprocess.PIPE,
-                )
-                output, error = process.communicate()
-                if error:
-                    raise Exception(error)
-                default_browser = output.decode("utf-8").strip()
-            except Exception as e:
-                print(f"Error getting default browser: {e}")
-                print("Using global default=", failure_browser_name)
-                default_browser = failure_browser_name
-        case "Windows":
-            import winreg
-
-            try:
-                key = winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    r"Software\Classes\http\shell\open\command",
-                )
-                default_browser = winreg.QueryValueEx(key, None)[0]
-                default_browser = (
-                    default_browser.split('"')[1]
-                    if '"' in default_browser
-                    else default_browser.split()[0]
-                )
-                winreg.CloseKey(key)
-            except FileNotFoundError:
-                print("Default browser information not found.")
-                print("Using global default=", failure_browser_name)
-                default_browser = failure_browser_name
-        case _:
-            print(
-                "Do not know how to handle host operating system with name=" + host_os
+    if host_os == "Linux":
+        try:
+            process = subprocess.Popen(
+                ["xdg-settings", "get", "default-web-browser"],
+                stdout=subprocess.PIPE,
             )
+            output, error = process.communicate()
+            if error:
+                raise Exception(error)
+            default_browser = output.decode("utf-8").strip()
+        except FileNotFoundError:
+            print("xdg-settings not found. Cannot determine default browser.")
             print("Using global default=", failure_browser_name)
             default_browser = failure_browser_name
+        except Exception as e:
+            print(f"Error getting default browser: {e}")
+            print("Using global default=", failure_browser_name)
+            default_browser = failure_browser_name
+    elif host_os == "Darwin":
+        # obtained from google - does not work with current macos
+        try:
+            process = subprocess.Popen(
+                ["osascript", "-e", "POSIX path of (get frontmost application)"],
+                stdout=subprocess.PIPE,
+            )
+            output, error = process.communicate()
+            if error:
+                raise Exception(error)
+            default_browser = output.decode("utf-8").strip()
+        except Exception as e:
+            print(f"Error getting default browser: {e}")
+            print("Using global default=", failure_browser_name)
+            default_browser = failure_browser_name
+    elif host_os == "Windows":
+        import winreg
+    
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Classes\http\shell\open\command",
+            )
+            default_browser = winreg.QueryValueEx(key, None)[0]
+            default_browser = (
+                default_browser.split('"')[1]
+                if '"' in default_browser
+                else default_browser.split()[0]
+            )
+            winreg.CloseKey(key)
+        except FileNotFoundError:
+            print("Default browser information not found.")
+            print("Using global default=", failure_browser_name)
+            default_browser = failure_browser_name
+    else:
+        print(
+            "Do not know how to handle host operating system with name=" + host_os
+        )
+        print("Using global default=", failure_browser_name)
+        default_browser = failure_browser_name
     return default_browser

@@ -52,21 +52,20 @@ def datafile(
 
     # first make sure file name is valid - enforce pedantic rule about extension
     file_extension = os.path.splitext(filename)[1]
-    match format:
-        case "yaml":
-            if file_extension not in [".yaml", ".yml"]:
-                message = prog + ":  illegal file name for yaml file=" + filename + "\n"
-                message += "format argument demands file be a yaml file\n"
-                message += "A valid yaml data file name must end in .yaml or .yml"
-                raise ValueError(message)
-        case "pf":
-            if file_extension != ".pf":
-                message = prog + ":  illegal file name for pf file=" + filename + "\n"
-                message += (
-                    "format argument demands file be an Antelope pf format file\n"
-                )
-                message += "A valid pf data file name must end in .pf"
-                raise ValueError(message)
+    if format == "yaml":
+        if file_extension not in [".yaml", ".yml"]:
+            message = prog + ":  illegal file name for yaml file=" + filename + "\n"
+            message += "format argument demands file be a yaml file\n"
+            message += "A valid yaml data file name must end in .yaml or .yml"
+            raise ValueError(message)
+    elif format == "pf":
+        if file_extension != ".pf":
+            message = prog + ":  illegal file name for pf file=" + filename + "\n"
+            message += (
+                "format argument demands file be an Antelope pf format file\n"
+            )
+            message += "A valid pf data file name must end in .pf"
+            raise ValueError(message)
     dirlist = dirs.copy()
     # extend the search if MSPASS_HOME is defined
     mspass_home = os.environ.get("MSPASS_HOME")

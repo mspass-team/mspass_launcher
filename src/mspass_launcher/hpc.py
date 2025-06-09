@@ -613,13 +613,12 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
 
         retval = 1
         for container in statlist:
-            match container:
-                case "db":
-                    stat = self.dbserver_process.poll()
-                case "scheduler":
-                    stat = self.scheduler_process.poll()
-                case "primary_worker":
-                    stat = self.primary_worker_process.poll()
+            if container == "db":
+                stat = self.dbserver_process.poll()
+            elif container == "scheduler":
+                stat = self.scheduler_process.poll()
+            elif container == "primary_worker":
+                stat = self.primary_worker_process.poll()
             if verbose:
                 verbose_message(container, stat)
             if stat:

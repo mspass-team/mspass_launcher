@@ -76,6 +76,7 @@ class MsPASSDesktopCluster:
         directory.
         """
         self.docker_configuration_file = datafile(configuration)
+        self.browser_process=None
 
     def launch_cluster(self):
         """
@@ -133,10 +134,9 @@ class MsPASSDesktopCluster:
         elif host_os == "Linux":
             runline = [browser, url]
         elif host_os == "Windows":
-            print(
-                "MsPASSDesktopCluster.launch_jupyter_client: windows browser launching not yet implemented"
-            )
-            print("You will need to enter url in a browser window manually")
+            runline.append("start")
+            runline.append(browser)
+            runline.append(url)
         else:
             message = "MsPASSDesktopCluster.launch_jupyter_client:  cannot handle this operating system"
             message += "platform.system returned {}\n".format(host_os)
@@ -144,18 +144,21 @@ class MsPASSDesktopCluster:
                 "Only know how to handle one of:  Darwin, Linux, or Windows\n"
             )
             message += "Submit a pull request with a fix and for now use the CLI cut-and-paste method to connect to jupyter"
-            print(message)
-        if len(runline) > 0:
-            try:
-                subprocess.run(runline, capture_output=True, text=True, check=True)
-            except subprocess.CalledProcessError as e:
-                print(
-                    f"MsPASSDesktopCluster.launch_jupyter_client:  subprocess run call failed with return code = {e.returncode}:"
-                )
-                print(f"Stderr from subprocess:\n{e.stderr}")
-                print(
-                    "Launch jupyter window manually as described in mspass documentation"
-                )
+            raise RuntimeError(message)
+        try:
+            if host_os == "Windows":
+                # TODO:  untested.  shell=True add on based on google ai suggestion
+                self.browser_process = subprocess.Popen(runline, shell=True)
+            else:
+                self.browser_process = subprocess.Popen(runline)
+        except subprocess.CalledProcessError as e:
+            print(
+                f"MsPASSDesktopCluster.launch_jupyter_client:  subprocess run call failed with return code = {e.returncode}:"
+            )
+            print(f"Stderr from subprocess:\n{e.stderr}")
+            print(
+                "Launch jupyter window manually as described in mspass documentation"
+            )
 
     def run(self, filename, container="mspass-scheduler", return_output=False) -> str:
         """
@@ -307,6 +310,8 @@ class MsPASSDesktopCluster:
             print(runout.stdout)
             print("stderr from DesktopLauncher.shutdown")
             print(runout.stderr)
+        if self.browser_process:
+            self.browser_process.terminate()
 
     def url(self) -> str:
         """
@@ -618,6 +623,7 @@ class MsPASSDesktopGUI:
         self.engine.launch_jupyter_client(self.browser)
         jupyter_url = self.engine.url()
         self.text_url.insert("1.0", jupyter_url)
+        self.btn_jupyter.config(state="normal")
 
     def launch_diagnostics_callback(self):
         """

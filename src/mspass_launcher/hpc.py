@@ -16,12 +16,10 @@ the original shell scripts used for launching mspass.
 """
 from abc import ABC, abstractmethod
 import yaml
-import os
 import subprocess
 
 # import mock_subprocess as subprocess
 import copy
-import time
 from mspass_launcher.util import datafile
 
 
@@ -195,12 +193,17 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
           componnts) when it goes out of scope.
         :param verbose:  When True print out information useful for
           debugging a configuration issue.   Use when setting up
-          a new configuration to verify it is what you want.
+          a new configuration to verify it is what you want.  It will also 
+          make all method calls verbose unless explicitly silenced by 
+          setting the method kwarg verbose arg to False.
 
         """
         message0 = "HPCClusterLauncher constructor:  "
         if verbose:
             print("Loading configuration file=", configuration_file)
+            self.verbose = True
+        else:
+            self.verbose = False
         super().__init__(configuration_file)
         # The base class constructor creates this image of the yaml
         # file.  It only extracts common attributes.  Here we
@@ -327,7 +330,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         """
         self.shutdown()
 
-    def launch(self, verbose=False):
+    def launch(self, verbose=None):
         """
         Call this method to launch all the MsPASS containerized components.
 
@@ -342,7 +345,11 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         "self.dbserver_process", and "self.remote_worker_process".
         If workers are run on the primary there will also be a defined
         valued for "self.primary_worker_process".
+        
+        Set boolean verbose to override object global verbose setting
         """
+        if verbose:
+            verbose = self.verbose
         runline = self._initialize_container_runargs()
         runline.append(self.container_env_flag)
         envlist = "MSPASS_ROLE=scheduler,MSPASS_WORK_DIR={}".format(
@@ -467,6 +474,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         cluster containers down cleanly using the Popen method
         called terminate.   If terminate files the handler use a kill.
         """
+        if self.verbose:
+            self.status(verbose=True)
         if self.jupyter_process:
             try:
                 self.jupyter_process.terminate()
@@ -516,6 +525,11 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         # this can be made more elaborate.  Here I just run
         # a script
         print("Trying to run python script file=", pyscript)
+        if self.verbose:
+            print("Status of services running when this job was launched")
+            self.status(verbose=True)
+            print("/////////////////////////")
+            print("Starting run process")
         runline = []
         # I am going to hard code this for now
         runline.append("apptainer")
@@ -562,7 +576,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         print(stdout)
         print(stderr)
 
-    def status(self, container="all", verbose=True) -> int:
+    def status(self, container="all", verbose=None) -> int:
         """
         Check the status of one or more of the containers managed by this object.
 
@@ -591,7 +605,10 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         :return:  int status.  1 means the container(s) tested were all
            running.  0 means one or more have died.
         """
-        all_containers = ["db", "scheduler", "primary_worker"]
+        if verbose is None:
+            verbose = self.verbose
+            
+        all_containers = ["db", "scheduler", "primary_worker", "remote_workers"]
         if container == "all":
             statlist = all_containers
         else:
@@ -619,6 +636,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                 stat = self.scheduler_process.poll()
             elif container == "primary_worker":
                 stat = self.primary_worker_process.poll()
+            elif container == "remote_worker":
+                stat = self.remote_worker_process.poll()
             if verbose:
                 verbose_message(container, stat)
             if stat:
@@ -689,7 +708,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         envlist = "MSPASS_ROLE=worker,"
         envlist += "MSPASS_WORK_DIR={},".format(self.working_directory)
         envlist += "MSPASS_SCHEDULER_ADDRESS={},".format(self.scheduler_host)
-        envlist += "MSPASS_DB_ADDRESS={}".format(self.database_host)
+        envlist += "MSPASS_DB_ADDRESS={},".format(self.database_host)
         envlist += 'MSPASS_WORKER_ARG="--nworkers={} --nthreads 1"'.format(
             self.workers_per_node
         )

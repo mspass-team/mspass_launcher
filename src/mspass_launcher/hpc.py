@@ -16,12 +16,10 @@ the original shell scripts used for launching mspass.
 """
 from abc import ABC, abstractmethod
 import yaml
-import os
 import subprocess
 
 # import mock_subprocess as subprocess
 import copy
-import time
 from mspass_launcher.util import datafile
 
 
@@ -91,7 +89,7 @@ class BasicMsPASSLauncher(ABC):
             print(f"Message posted: {e}")
             raise RuntimeError("HPCClusterLauncher Constructor failed")
         except Exception as e:
-            print(f"Unexpected exception thrown by yaml.safe_load")
+            print("Unexpected exception thrown by yaml.safe_load")
             print(f"Message posted: {e}")
             raise RuntimeError("HPCClusterLauncher Constructor failed")
 
@@ -195,12 +193,17 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
           componnts) when it goes out of scope.
         :param verbose:  When True print out information useful for
           debugging a configuration issue.   Use when setting up
-          a new configuration to verify it is what you want.
+          a new configuration to verify it is what you want.  It will also 
+          make all method calls verbose unless explicitly silenced by 
+          setting the method kwarg verbose arg to False.
 
         """
         message0 = "HPCClusterLauncher constructor:  "
         if verbose:
             print("Loading configuration file=", configuration_file)
+            self.verbose = True
+        else:
+            self.verbose = False
         super().__init__(configuration_file)
         # The base class constructor creates this image of the yaml
         # file.  It only extracts common attributes.  Here we
@@ -211,8 +214,21 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         self.container_run_args = cluster_config["container_run_args"]
         self.container_env_flag = cluster_config["container_env_flag"]
         # at present this is local version of mpiexec
-        self.worker_run_command = cluster_config["worker_run_command"]
+        self.remote_worker_run_command = cluster_config["remote_worker_run_command"]
+        # we need to allow this to be optional - default to none
+        if "mpi_arg_list" in cluster_config:
+            self.mpi_arg_list = cluster_config["mpi_arg_list"]
+        else:
+            self.mpi_arg_list = None
         self.task_scheduler = cluster_config["task_scheduler"]
+        
+        acceptable_implementations=["openmpi","mpich","tacc"]
+        self.mpi_implementation = cluster_config["mpi_implementation"]
+        if self.mpi_implementation not in acceptable_implementations:
+            message = "HPCClusterLauncher constructor:  "
+            message += "Illegal value for mpi_implementation={}\n".format(self.mpi_implementation)
+            message += "Must be one of:  " + str(acceptable_implementations)
+            raise ValueError(message)
 
         # This last complex block sets hostnames that
         # define the MsPASS frameworK;  database, scheduler, workers, and primary
@@ -226,6 +242,12 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             dbh = cluster_config["database_host"]
             sh = cluster_config["scheduler_host"]
             wh = cluster_config["worker_hosts"]
+            self.hostlist_filename = cluster_config["hostlist_filename"]
+            if "remote_processes_per_node" in cluster_config:
+                ppn = cluster_config["remote_proceses_per_node"]
+            else:
+                # Use this to mean leave this blank in hostname file
+                ppn = None
             if (ph == "auto") or (dbh == "auto") or (sh == "auto") or (wh == "auto"):
                 # this executes a slurm command to fetch nodes assigned to
                 # this job
@@ -237,7 +259,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                 )
                 hostlist = comout.stdout.split()
 
-                if len(hostlist) == 0:
+                print("Debug: hostlist returned by scontrol=",hostlist)
+                if len(hostlist) <= 1:
                     if self.primary_node_workers == 0:
                         message = message0
                         message += (
@@ -250,6 +273,12 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                             ["hostname"], capture_output=True, text=True
                         )
                         hostlist = [comout.stdout]
+                        # set as an empty list instead of a None - less confusing
+                        self.remote_workers = list()
+                else:
+                    print("Debug:  calling _write_hostlist method with hostlist=",hostlist)
+                    self.remote_workers = self._write_hostlist(hostlist,ppn)
+                    print("Debug:   list of remote hosts returned by that method=",self.remote_workers)
                 # comout contans a list of host names. By default for
                 # auto use the first in the list as primary
                 primary = hostlist[0].strip()  # needed because of appended newline
@@ -265,22 +294,41 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                     self.scheduler_host = copy.deepcopy(primary)
                 else:
                     self.scheduler_list = sh
-                if wh == "auto":
-                    # note worker_hoss exclude primary
-                    self.worker_hosts = []
-                    for i in range(1, len(hostlist), 1):
-                        self.worker_hosts.append(
-                            hostlist[i].strip()
-                        )  # strip needed to remove newline
+                self.worker_hosts=list()
+                # this gets a bit complicaed for input flexibility of 
+                # worker host list - default will be auto but allow
+                # list of names as command separated string or a 
+                # list created from the yaml file.  They differ in 
+                # syntax only in that a list is created if enclosed in []
+                if isinstance(wh,str):
+                    if "," in wh:
+                        # accept a comma separated string listing hosgts
+                        # eg. "ch1,ch2,ch3"
+                        self.worker_hosts=wh.split(",")
+                    elif wh == "auto":
+                        # note worker_hoss exclude primary
+                        for i in range(1, len(hostlist), 1):
+                            self.worker_hosts.append(
+                                hostlist[i].strip()
+                                )  # strip needed to remove newline
 
-                    if len(self.worker_hosts) <= 0 and self.primary_node_workers == 0:
-                        message = message0
-                        message += "Illegal configuration\n"
-                        message += "scontrol  returned only a single hostname "
-                        message += "but primary_node_workers was set to 0\n"
-                        message += "To run on a single node set primary_node_workers to a postive value\n"
-                        message += "To run on multiple nodes change your slurm commands at the top of this job"
-                        raise RuntimeError(message)
+                        if len(self.worker_hosts) <= 0 and self.primary_node_workers == 0:
+                            message = message0
+                            message += "Illegal configuration\n"
+                            message += "scontrol  returned only a single hostname "
+                            message += "but primary_node_workers was set to 0\n"
+                            message += "To run on a single node set primary_node_workers to a postive value\n"
+                            message += "To run on multiple nodes change your slurm commands at the top of this job"
+                            raise RuntimeError(message)
+                    else:
+                        # assume there is one node listed only as wh
+                        self.worker_hosts.append(wh)
+     
+                elif isinstance(wh,list):
+                    # accept yaml input as a list of hostnames
+                    for host in wh:
+                        self.worker_hosts.append(host)
+                    
                 if verbose:
                     print("Primary node name=", self.primary_node)
                     print("database hostname=", self.database_host)
@@ -327,7 +375,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         """
         self.shutdown()
 
-    def launch(self, verbose=False):
+    def launch(self, verbose=None):
         """
         Call this method to launch all the MsPASS containerized components.
 
@@ -342,7 +390,11 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         "self.dbserver_process", and "self.remote_worker_process".
         If workers are run on the primary there will also be a defined
         valued for "self.primary_worker_process".
+        
+        Set boolean verbose to override object global verbose setting
         """
+        if verbose:
+            verbose = self.verbose
         runline = self._initialize_container_runargs()
         runline.append(self.container_env_flag)
         envlist = "MSPASS_ROLE=scheduler,MSPASS_WORK_DIR={}".format(
@@ -389,9 +441,27 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             print("launch line:")
             print(runline)
         # Now launch workers on hosts that are not primaary host
-        worker_run_args = self._build_worker_run_args()
-        if len(worker_run_args) > 0:
-            print("launching workers on remote hosts")
+        #worker_run_args = self._build_worker_run_args()
+        if len(self.worker_hosts) > 0:
+            print("launching workers on remote hosts=",self.worker_hosts)
+            worker_run_args=list()
+            worker_run_args.append(self.remote_worker_run_command)
+            worker_run_args.append("-hostfile")
+            worker_run_args.append(self.hostlist_filename)
+            if self.mpi_arg_list:
+                for arg in self.mpi_arg_list:
+                    worker_run_args.append(arg)
+            # this private function creates the list of args to 
+            # launch mspass container as the run argument
+            container_args = self._build_worker_run_args()
+            for arg in container_args:
+                worker_run_args.append(arg)
+            print("Debug - remote worker launch string to test")
+            s=""
+            for a in worker_run_args:
+                s += a
+                s += " "
+            print(s)
             self.remote_worker_process = subprocess.Popen(
                 worker_run_args,
                 stdin=subprocess.PIPE,
@@ -422,7 +492,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             envlist += "MSPASS_WORK_DIR={},".format(self.working_directory)
             # envlist += "MSPASS_SCHEDULER_ADDRESS={}".format(self.scheduler_host)
             envlist += "MSPASS_SCHEDULER_ADDRESS={},".format(self.scheduler_host)
-            # envlist += "MSPASS_DB_ADDRESS={},".format(self.database_host)
+            envlist += "MSPASS_DB_ADDRESS={},".format(self.database_host)
             envlist += 'MSPASS_WORKER_ARG="--nworkers={} --nthreads 1"'.format(
                 self.primary_node_workers
             )
@@ -467,6 +537,23 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         cluster containers down cleanly using the Popen method
         called terminate.   If terminate files the handler use a kill.
         """
+        if self.verbose:
+            self.status(verbose=True)
+            def print_process_outputs(process,service_name):
+                """
+                Inline function used to standardize printing of 
+                stdout and stderr in verbose mode.  Assumes process is
+                the return from a call to Popen and the process has 
+                already been terminated.  Be sure that is true of the 
+                program will hang on the call to the communicate method.
+                i.e. it will wait until the process exits which would 
+                be never in the context of this method.
+                """
+                stdout,stderr = process.communicate()
+                print("STDOUT from service = ",service_name)
+                print(stdout.decode('utf-8'))
+                print("STDERR from service = ",service_name)
+                print(stderr.decode('utf-8'))
         if self.jupyter_process:
             try:
                 self.jupyter_process.terminate()
@@ -477,6 +564,20 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                 )
                 print("Reverting to less graceful kill")
                 self.jupyter_process.kill()
+            if self.verbose:
+                print_process_outputs(self.jupyter_process,"jupyter server")
+        if self.remote_worker_process:
+            try:
+                self.remote_worker_process.terminate()
+                self.remote_worker_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                print(
+                    "mpirun driving worker container on remote nodes did not respond to terminate method"
+                )
+                print("Reverting to less graceful kill")
+                self.remote_worker_process.kill()
+            if self.verbose:
+                print_process_outputs(self.remote_worker_process,"remote_workers")
         if self.primary_worker_process:
             try:
                 self.primary_worker_process.terminate()
@@ -487,6 +588,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                 )
                 print("Reverting to less graceful kill")
                 self.primary_worker_process.kill()
+            if self.verbose:
+                print_process_outputs(self.primary_worker_process,"primary_node_workers")
         # terminate the scheduler
         try:
             self.scheduler_process.terminate()
@@ -495,6 +598,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             print("Scheduler container did not respond to terminate method")
             print("Reverting to less graceful kill")
             self.scheduler_process.kill()
+        if self.verbose:
+            print_process_outputs(self.scheduler_process,"scheduler")
         # now database - should always be running so no need for None test
         try:
             self.dbserver_process.terminate()
@@ -503,6 +608,8 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             print("Database server container did not respond to terminate method")
             print("Reverting to less graceful kill")
             self.dbserver_process.kill()
+        if self.verbose:
+            print_process_outputs(self.dbserver_process,"MonogDB_server")
 
     def run(self, pyscript):
         """
@@ -516,6 +623,11 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         # this can be made more elaborate.  Here I just run
         # a script
         print("Trying to run python script file=", pyscript)
+        if self.verbose:
+            print("Status of services running when this job was launched")
+            self.status(verbose=True)
+            print("/////////////////////////")
+            print("Starting run process")
         runline = []
         # I am going to hard code this for now
         runline.append("apptainer")
@@ -562,7 +674,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         print(stdout)
         print(stderr)
 
-    def status(self, container="all", verbose=True) -> int:
+    def status(self, container="all", verbose=None) -> int:
         """
         Check the status of one or more of the containers managed by this object.
 
@@ -591,7 +703,10 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         :return:  int status.  1 means the container(s) tested were all
            running.  0 means one or more have died.
         """
-        all_containers = ["db", "scheduler", "primary_worker"]
+        if verbose is None:
+            verbose = self.verbose
+            
+        all_containers = ["db", "scheduler", "primary_worker", "remote_workers"]
         if container == "all":
             statlist = all_containers
         else:
@@ -618,7 +733,16 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             elif container == "scheduler":
                 stat = self.scheduler_process.poll()
             elif container == "primary_worker":
-                stat = self.primary_worker_process.poll()
+                # this can be None if number workers set 0
+                if self.primary_worker_process is not None:
+                    stat = self.primary_worker_process.poll()
+                else:
+                    print("No primary worker process was launched")
+            elif container == "remote_worker":
+                if self.remote_worker_process is not None:
+                    stat = self.remote_worker_process.poll()
+                else:
+                    print("No remote worker process was launched")
             if verbose:
                 verbose_message(container, stat)
             if stat:
@@ -647,38 +771,56 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         for arg in rtmp:
             crargs.append(arg)
         return crargs
+    def _write_hostlist(self,allhosts,ppn)->list:
+        if len(allhosts)<=1:
+            message = "HPCClusterLauncher._write_hostlist:  coding error. length of hostlist received less than 2"
+            raise ValueError(message)
+        # create list of only the remote nodes 
+        # created here as all but the 0 component
+        remote_nodes=list()
+        for i in range(1,len(allhosts)):
+            remote_nodes.append(allhosts[i])
+        with open(self.hostlist_filename,"w") as fp:
+            if ppn:
+                # this should use the new match-case construct but 
+                # too many HPC systems default python is older than 3.10
+                # so we use an if elif sequenc here
+                outlines=list()
+                if self.mpi_implementation == "openmpi":
+                    for host in remote_nodes:
+                        s = "{} slots{}".format(host,ppn)
+                        outlines.append(s)
+                elif self.mpi_implementation == "mpich":
+                    for host in remote_nodes:
+                        s = "{}:{}".format(host,ppn)
+                        outlines.append(s)
+                elif self.mpi_implementation == "tacc":
+                    print("HPCClusterLauncher:  ppn node ignored when mps_implementation is tacc")
+                    print("At TACC all nodes are exclusive access")
+                    for host in remote_nodes:
+                        outlines.append(host)
+                else:
+                    message = "HPCClusterLauncher._write_hostlist:  "
+                    message += "illegal value for self.mpi_implementation.\n"
+                    message += "Coding error - this should have been caught in the constructor"
+                    raise ValueError(message)
+                fp.writelines(outlines)
+            else:
+                # there is not implementation dependency unless 
+                # ppn (processors per node) is requested.
+                # in this case we just write node names
+                fp.writelines(remote_nodes)
+        return remote_nodes
 
     def _build_worker_run_args(self) -> list:
         """
-        Private method that constructs the command to launch
-        workers on nodes other than the primary node.   Uses the
-        list of hostnames loaded by the contructor.
-
-        This function is actually totally married to mpiexec as
-        the args it constructs are only for that application
-
-        Returns an empty list if the worker list is empty.
-        Caller should handle tha situation and exit if the
-        here are no workers assigned to primary.
+        Private method that constructs the command to be run by 
+        mpirun on worker nodes.  It returns a list of arguments 
+        that should be appended to the arglist that begins 
+        with self.remote_launch_command (usually "mpirun")
         """
-        nnodes = len(self.worker_hosts)
-        if nnodes == 0:
-            return []
-        arglist = []
-        # cthis allows args to be entered on teh run line in config file
-        tlist = self.worker_run_command.split()
-        for arg in tlist:
-            arglist.append(arg)
-        # these are actually locked to mpiexec so this isn't
-        # as flexible as it might look
-        arglist.append("-n")
-        arglist.append(str(nnodes))
-        arglist.append("-ppn")
-        arglist.append("1")
-        arglist.append("-hosts")
-        for hostname in self.worker_hosts:
-            arglist.append(hostname)
         # simillar to launch method to generate run  line for container
+        arglist=list()
         for arg in self.container_run_command.split():
             arglist.append(arg)
         for arg in self.container_run_args.split():
@@ -689,12 +831,16 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         envlist = "MSPASS_ROLE=worker,"
         envlist += "MSPASS_WORK_DIR={},".format(self.working_directory)
         envlist += "MSPASS_SCHEDULER_ADDRESS={},".format(self.scheduler_host)
+        # testing only - removed comma
         envlist += "MSPASS_DB_ADDRESS={}".format(self.database_host)
-        envlist += 'MSPASS_WORKER_ARG="--nworkers={} --nthreads 1"'.format(
-            self.workers_per_node
-        )
+        #envlist += "MSPASS_DB_ADDRESS={},".format(self.database_host)
+        #envlist += "MSPASS_WORKER_ARG='--nworkers={} --nthreads 1'".format(
+        #    self.workers_per_node
+        #)
+        # trying this to split up worker_arg
+        envlist += "MSPASS_WORKER_ARG='"
+        envlist += "--nworkers={}".format(self.workers_per_node)
+        envlist += "--nthreads 1'"
         arglist.append(envlist)
         arglist.append(self.container)
-        # also backgrounded
-        arglist.append("&")
         return arglist

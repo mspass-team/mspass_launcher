@@ -64,6 +64,10 @@ class BasicMsPASSLauncher(ABC):
         self.database_directory = self.yaml_dict["database_directory"]
         self.worker_directory = self.yaml_dict["worker_directory"]
         self.workers_per_node = self.yaml_dict["workers_per_node"]
+        if "worker_memory_limit" in self.yaml_dict:
+            self.worker_memory_limit = self.yaml_dict["worker_memory_limit"]
+        else:
+            self.worker_memory_limit = None
         self.primary_node_workers = self.yaml_dict["primary_node_workers"]
         self.cluster_subnet_name = self.yaml_dict["cluster_subnet_name"]
 
@@ -463,7 +467,9 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
                 s += " "
             print(s)
             self.remote_worker_process = subprocess.Popen(
-                worker_run_args,
+                #worker_run_args,
+                s,
+                shell=True,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -668,7 +674,10 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         runline.append(envlist)
         runline.append(self.container)
         self.jupyter_process = subprocess.Popen(
-            runline, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            runline, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            text=True,
         )
         stdout, stderr = self.jupyter_process.communicate()
         print(stdout)
@@ -827,20 +836,24 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             arglist.append(arg)
         # apptainer mthod for setting environment variables loaded
         # in contaer
-        arglist.append("--env")
-        envlist = "MSPASS_ROLE=worker,"
-        envlist += "MSPASS_WORK_DIR={},".format(self.working_directory)
-        envlist += "MSPASS_SCHEDULER_ADDRESS={},".format(self.scheduler_host)
+        arglist.append('--env')
+        envlist = 'MSPASS_ROLE=worker,'
+        envlist += 'MSPASS_WORK_DIR={},'.format(self.working_directory)
+        envlist += 'MSPASS_SCHEDULER_ADDRESS={},'.format(self.scheduler_host)
         # testing only - removed comma
-        envlist += "MSPASS_DB_ADDRESS={}".format(self.database_host)
-        #envlist += "MSPASS_DB_ADDRESS={},".format(self.database_host)
-        #envlist += "MSPASS_WORKER_ARG='--nworkers={} --nthreads 1'".format(
+        envlist += 'MSPASS_DB_ADDRESS={},'.format(self.database_host)
+        #envlist += 'MSPASS_DB_ADDRESS={},'.format(self.database_host)
+        #envlist += 'MSPASS_WORKER_ARG='--nworkers={} --nthreads 1''.format(
         #    self.workers_per_node
         #)
         # trying this to split up worker_arg
-        envlist += "MSPASS_WORKER_ARG='"
-        envlist += "--nworkers={}".format(self.workers_per_node)
-        envlist += "--nthreads 1'"
+        envlist += 'MSPASS_WORKER_ARG="'
+        envlist += '--nworkers={} '.format(self.workers_per_node)
+        envlist += '--nthreads=1"'
+        if self.worker_memory_limit:
+            # need leading comma here as this one is optional
+            # if left trailing the last it would be a syntax error
+            envlist += ",MSPASS_DASK_WORKER_MEMORY_LIMIT={}".format(self.worker_memory_limit)    
         arglist.append(envlist)
         arglist.append(self.container)
         return arglist

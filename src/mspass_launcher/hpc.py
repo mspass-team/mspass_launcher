@@ -248,7 +248,7 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
             wh = cluster_config["worker_hosts"]
             self.hostlist_filename = cluster_config["hostlist_filename"]
             if "remote_processes_per_node" in cluster_config:
-                ppn = cluster_config["remote_proceses_per_node"]
+                ppn = cluster_config["remote_processes_per_node"]
             else:
                 # Use this to mean leave this blank in hostname file
                 ppn = None

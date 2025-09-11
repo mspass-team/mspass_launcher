@@ -1,17 +1,21 @@
 # These are parameters common to all launchers
 # they do, however, need to be customized or each site and user
 container:  /N/slate/pavlis/containers/mspass_latest.sif
-working_directory:  /N/scratch/pavlis/testing
-log_directory:  /N/scratch/pavlis/testing/logs
-database_directory:  /N/scratch/pavlis/testing/db
-worker_directory:  /N/scratch/pavlis/testing/work
+working_directory:  /N/slate/pavlis/usarray
+log_directory:  /N/slate/pavlis/usarray/logs
+database_directory:  /N/slate/pavlis/usarray/db
+worker_directory:  /N/slate/pavlis/usarray/logs
 # these were not part of older shell script configuation
-workers_per_node: 64  
+workers_per_node: 32
 # one can choose to launch workes on the master node by setting this 
 # value to a positive number
-primary_node_workers: 2
+primary_node_workers: 8
+# set subnet name for the cluster you are using
 cluster_subnet_name:  quartz.uits.iu.edu
 db_startup_delay:  10   # number of seconds to pause after launching MongoDB
+# These are hpc specific parameters
+# Note auto means the launcher can usually derive them from the job 
+# scheduler (currently only slurm is know to work).  
 HPC_cluster: 
     # This defines the host where python/jupyter and the scheduler will run
     # In this implementation that is frozen
@@ -23,16 +27,27 @@ HPC_cluster:
     worker_hosts:  auto
     job_scheduler:  slurm
     task_scheduler:  dask
+    # this might be singularity at some sites
     container_run_command:  apptainer run
-    container_run_args:  -B /N/scratch/pavlis/testing --home /N/scratch/pavlis/testing
+    container_run_args:  -B /N/slate/pavlis/usarray --home /N/slate/pavlis/usarray
     # flag to set environment variables - likely not to change but this is
     # what apptainer uses
     container_env_flag:  --env
-    # local version of mpiexec.  TACC has a nonstandard version
-    # currently there are not common args and teh launcher has to 
-    # append a number of things
-    worker_run_command:  mpiexec 
     setup_tunnel: false
     # this needs to be a shell script on current path.  
     # executed only if setup_tunnel is set True
     tunnel_setup_command:  tacc_mspass_com_setup.sh
+    # new parameters for July 2025 revision
+    # set version of mpi - must be one of openmpi, mpich, or tacc
+    mpi_implementation: openmpi
+    # this lists any optional mpi arguments - empty list used to mean none
+    mpi_arg_list: []
+    remote_worker_run_command: mpirun
+    hostlist_filename:  /tmp/mspass_remote_hosts
+    #  remove comment and set a value if slurm request sets number of processors
+    #remote_processes_per_node:  32
+    # Remove this comment if you need dask to impose a memory limit
+    # Default at present is to not impose a limit to improve performance
+    # Beware, however, as you need to be sure you workflow will run in 
+    # the space available.  Turn this on if you aren't sure
+    #worker_memory_limit: 8GiB

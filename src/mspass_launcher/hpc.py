@@ -646,17 +646,71 @@ class HPCClusterLauncher(BasicMsPASSLauncher):
         envlist += ",MSPASS_WORK_DIR={}".format(self.working_directory)
         envlist += ",MSPASS_DB_ADDRESS={}".format(self.database_host)
         envlist += ",MSPASS_SCHEDULER_ADDRESS={}".format(self.scheduler_host)
+        envlist += ",PYTHONUNBUFFERED=1"  # Force unbuffered Python output
         runline.append(envlist)
         runline.append(self.container)
         runline.append("--batch")
         runline.append(pyscript)
         print("running script file= ", pyscript)
 
-        runout = subprocess.run(runline, capture_output=True, text=True)
-        print("stdout from this job")
-        print(runout.stdout)
-        print("stderr from this job")
-        print(runout.stderr)
+        # Use exactly two threads for real-time output
+        process = subprocess.Popen(
+            runline, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True
+        )
+        
+        import threading
+        
+        # Use threading.Event to coordinate thread stopping
+        stop_flag = threading.Event()
+        
+        def stdout_reader():
+            """Thread 1: Handle stdout output"""
+            try:
+                while not stop_flag.is_set():
+                    line = process.stdout.readline()
+                    if line:
+                        print(line.rstrip(), flush=True)
+                    else:
+                        break
+            except Exception as e:
+                print(f"[THREAD ERROR] stdout_reader: {e}")
+        
+        def stderr_reader():
+            """Thread 2: Handle stderr output"""
+            try:
+                while not stop_flag.is_set():
+                    line = process.stderr.readline()
+                    if line:
+                        print(f"[ERROR] {line.rstrip()}", flush=True)
+                    else:
+                        break
+            except Exception as e:
+                print(f"[THREAD ERROR] stderr_reader: {e}")
+        
+        # Create exactly two threads
+        stdout_thread = threading.Thread(target=stdout_reader, name="stdout_reader")
+        stderr_thread = threading.Thread(target=stderr_reader, name="stderr_reader")
+        
+        # Start both threads
+        stdout_thread.start()
+        stderr_thread.start()
+        
+        # Wait for process to complete
+        process.wait()
+        
+        # Signal threads to stop
+        stop_flag.set()
+        
+        # Wait for both threads to finish (with timeout)
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        
+        print("=== Job completed with exit code:", process.returncode, "===")
 
     def interactive_session(self):
         """

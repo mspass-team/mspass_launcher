@@ -28,7 +28,7 @@ services:
       MSPASS_SCHEDULER: dask
       DASK_SCHEDULER_PORT: 8786
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8786
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8787/status || exit 1"]
       interval: 10s
       timeout: 60s
       retries: 5
